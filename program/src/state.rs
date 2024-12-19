@@ -1,7 +1,7 @@
 //! State transition types
 
 use crate::{error::AmmError, math::Calculator};
-use serum_dex::state::ToAlignedBytes;
+// use serum_dex::state::ToAlignedBytes;
 use solana_program::{
     account_info::AccountInfo,
     program_error::ProgramError,
@@ -65,7 +65,6 @@ macro_rules! impl_loadable {
         impl Loadable for $type_name {}
     };
 }
-#[cfg_attr(feature = "client", derive(Debug))]
 #[repr(C, packed)]
 #[derive(Clone, Copy, Default)]
 pub struct TargetOrder {
@@ -79,11 +78,10 @@ unsafe impl Pod for TargetOrder {}
 #[cfg(target_endian = "little")]
 unsafe impl TriviallyTransmutable for TargetOrder {}
 
-#[cfg_attr(feature = "client", derive(Debug))]
 #[repr(C, packed)]
 #[derive(Clone, Copy)]
 pub struct TargetOrders {
-    pub owner: [u64; 4],
+    pub owner: [u8; 32],
     pub buy_orders: [TargetOrder; 50],
     pub padding1: [u64; 8],
     pub target_x: u128,
@@ -120,7 +118,7 @@ impl Default for TargetOrders {
     #[inline]
     fn default() -> TargetOrders {
         TargetOrders {
-            owner: [0; 4],
+            owner: [0; 32],
             buy_orders: [TargetOrder::default(); 50],
             padding1: [0; 8],
             target_x: 0,
@@ -153,10 +151,10 @@ impl TargetOrders {
     /// init
     #[inline]
     pub fn check_init(&mut self, x: u128, y: u128, owner: &Pubkey) -> Result<(), ProgramError> {
-        if identity(self.owner) != Pubkey::default().to_aligned_bytes() {
+        if identity(self.owner) != Pubkey::default().to_bytes() {
             return Err(AmmError::AlreadyInUse.into());
         }
-        self.owner = owner.to_aligned_bytes();
+        self.owner = owner.to_bytes();
         self.last_order_numerator = 0; // 3
         self.last_order_denominator = 0; // 1
 
@@ -194,7 +192,7 @@ impl TargetOrders {
             return Err(AmmError::ExpectedAccount.into());
         }
         let data = Self::load_mut(account)?;
-        if identity(data.owner) != owner.to_aligned_bytes() {
+        if identity(data.owner) != owner.to_bytes() {
             return Err(AmmError::InvalidTargetOwner.into());
         }
         Ok(data)
@@ -214,7 +212,7 @@ impl TargetOrders {
             return Err(AmmError::ExpectedAccount.into());
         }
         let data = Self::load(account)?;
-        if identity(data.owner) != owner.to_aligned_bytes() {
+        if identity(data.owner) != owner.to_bytes() {
             return Err(AmmError::InvalidTargetOwner.into());
         }
         Ok(data)
@@ -366,7 +364,6 @@ impl AmmState {
     }
 }
 
-#[cfg_attr(feature = "client", derive(Debug))]
 #[derive(Copy, Clone)]
 #[repr(u64)]
 pub enum AmmParams {
@@ -438,7 +435,6 @@ impl AmmParams {
     }
 }
 
-#[cfg_attr(feature = "client", derive(Debug))]
 #[derive(Copy, Clone, Eq, PartialEq)]
 #[repr(u64)]
 pub enum AmmResetFlag {
@@ -633,7 +629,6 @@ impl StateData {
     }
 }
 
-#[cfg_attr(feature = "client", derive(Debug))]
 #[repr(C, packed)]
 #[derive(Clone, Copy, Default, PartialEq)]
 pub struct AmmInfo {
@@ -914,7 +909,6 @@ pub struct LastOrderDistance {
 }
 
 /// For simulateTransaction to get instruction data
-#[cfg_attr(feature = "client", derive(Debug))]
 #[derive(Copy, Clone)]
 #[repr(u64)]
 pub enum SimulateParams {
@@ -1318,11 +1312,10 @@ mod test {
 
     #[test]
     fn test_target_info_layout() {
-        let owner: [u64; 4] = [
-            0x123456789abcedf0,
-            0x123456789abced0f,
-            0x123456789abce0df,
-            0x123456789abc0edf,
+        let owner: [u8; 32] = [
+            0xf0, 0xed, 0xbc, 0x9a, 0x78, 0x56, 0x34, 0x12, 0x0f, 0xed, 0xbc, 0x9a, 0x78, 0x56,
+            0x34, 0x12, 0xdf, 0xe0, 0xbc, 0x9a, 0x78, 0x56, 0x34, 0x12, 0xdf, 0x0e, 0xbc, 0x9a,
+            0x78, 0x56, 0x34, 0x12,
         ];
         let mut buy_orders: [TargetOrder; 50] = [TargetOrder::default(); 50];
         let mut buy_orders_data = [0u8; 8 * 2 * 50];
@@ -1464,7 +1457,7 @@ mod test {
             bytemuck::from_bytes(&target_orders_data[0..core::mem::size_of::<TargetOrders>()]);
         // data check
         let unpack_owner = unpack_data.owner;
-        for i in 0..4 {
+        for i in 0..32 {
             assert_eq!(owner[i], unpack_owner[i]);
         }
         let unpack_buy_orders = unpack_data.buy_orders;
